@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">XR Desktop</string>
+    <string name="accessibility_description">Controls the external XR display with touch gestures and a cursor overlay, observes external app windows, and sends text only to editable fields on that display. No screen capture or network transmission.</string>
+</resources>
