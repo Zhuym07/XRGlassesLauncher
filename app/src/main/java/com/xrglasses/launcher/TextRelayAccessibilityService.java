@@ -1,14 +1,17 @@
 package com.xrglasses.launcher;
 
 import android.accessibilityservice.AccessibilityService;
+import android.accessibilityservice.AccessibilityServiceInfo;
 import android.accessibilityservice.GestureDescription;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.ColorSpace;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.PixelFormat;
+import android.hardware.HardwareBuffer;
 import android.hardware.display.DisplayManager;
 import android.os.Build;
 import android.os.Bundle;
@@ -23,6 +26,7 @@ import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
+import java.util.concurrent.Executor;
 import java.util.ArrayDeque;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -33,6 +37,13 @@ public class TextRelayAccessibilityService extends AccessibilityService {
     private static TextRelayAccessibilityService instance;
     private static String status = "service unavailable";
     private static final Set<Runnable> connectionListeners = new LinkedHashSet<>();
+    private static final Set<Runnable> windowListeners = new LinkedHashSet<>();
+    private final Runnable windowsChanged = () -> {
+        for (Runnable listener : windowListeners.toArray(new Runnable[0])) {
+            try { listener.run(); }
+            catch (RuntimeException error) { Log.w("XRLaunch", "window listener failed", error); }
+        }
+    };
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ArrayDeque<GestureDescription> queue = new ArrayDeque<>();
     private WindowManager cursorManager;
@@ -48,13 +59,22 @@ public class TextRelayAccessibilityService extends AccessibilityService {
 
     @Override protected void onServiceConnected() {
         instance = this;
-        report("service connected");
+        AccessibilityServiceInfo info = getServiceInfo();
+        boolean screenshot = info != null
+                && (info.getCapabilities() & AccessibilityServiceInfo.CAPABILITY_CAN_TAKE_SCREENSHOT) != 0;
+        report("service connected; screenshot=" + screenshot
+                + ", capabilities=" + (info == null ? "unknown" : info.getCapabilities()));
         notifyConnectionChanged();
     }
 
     @Override public void onAccessibilityEvent(AccessibilityEvent event) {
         if (event != null) {
             lastEvent = event.getPackageName() + "/" + event.getClassName();
+            if (event.getEventType() == AccessibilityEvent.TYPE_WINDOWS_CHANGED ||
+                    event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+                handler.removeCallbacks(windowsChanged);
+                handler.postDelayed(windowsChanged, 200L);
+            }
         }
     }
 
@@ -90,7 +110,52 @@ public class TextRelayAccessibilityService extends AccessibilityService {
     }
 
     private static void notifyConnectionChanged() {
-        for (Runnable listener : connectionListeners.toArray(new Runnable[0])) listener.run();
+        for (Runnable listener : connectionListeners.toArray(new Runnable[0])) {
+            try { listener.run(); }
+            catch (RuntimeException error) { Log.w("XRInput", "connection listener failed", error); }
+        }
+    }
+
+    public static void addWindowListener(Runnable listener) { windowListeners.add(listener); }
+    public static void removeWindowListener(Runnable listener) { windowListeners.remove(listener); }
+
+    public static final class ExternalWindowSnapshot {
+        public final ExternalRuntimeState.Presence presence;
+        public final String packageName;
+        ExternalWindowSnapshot(ExternalRuntimeState.Presence presence, String packageName) {
+            this.presence = presence; this.packageName = packageName;
+        }
+    }
+
+    /** Fresh interactive-window evidence only: lastEvent/history are never liveness evidence. */
+    public static ExternalWindowSnapshot externalWindowSnapshot(int displayId, String ownPackage) {
+        ExternalRuntimeState.Presence unknown = ExternalRuntimeState.Presence.UNKNOWN;
+        if (instance == null || Build.VERSION.SDK_INT < 30 || displayId <= 0) {
+            return new ExternalWindowSnapshot(unknown, "");
+        }
+        try {
+            SparseArray<List<AccessibilityWindowInfo>> all = instance.getWindowsOnAllDisplays();
+            // No visibility into any display is not proof that the external screen is empty.
+            if (all.size() == 0) return new ExternalWindowSnapshot(unknown, "");
+            List<AccessibilityWindowInfo> target = all.get(displayId);
+            boolean own = false, unreadable = false;
+            if (target != null) for (AccessibilityWindowInfo window : target) {
+                if (window.getType() != AccessibilityWindowInfo.TYPE_APPLICATION) continue;
+                AccessibilityNodeInfo root = window.getRoot();
+                if (root == null) { unreadable = true; continue; }
+                String pkg;
+                try { pkg = root.getPackageName() == null ? "" : root.getPackageName().toString(); }
+                finally { root.recycle(); }
+                if (pkg.isEmpty()) unreadable = true;
+                else if (ownPackage.equals(pkg)) own = true;
+                else return new ExternalWindowSnapshot(ExternalRuntimeState.Presence.APPLICATION, pkg);
+            }
+            return new ExternalWindowSnapshot(unreadable ? unknown : own
+                    ? ExternalRuntimeState.Presence.DESKTOP : ExternalRuntimeState.Presence.EMPTY, "");
+        } catch (RuntimeException error) {
+            Log.w("XRLaunch", "live external window query failed", error);
+            return new ExternalWindowSnapshot(unknown, "");
+        }
     }
 
     public static boolean isEnabled() { return instance != null; }
@@ -98,21 +163,44 @@ public class TextRelayAccessibilityService extends AccessibilityService {
     public static String diagnostics() {
         return "service=" + isEnabled() + ", " + status
                 + (instance == null ? "" : ", target=" + instance.targetDisplay
-                + ", queued=" + instance.queue.size() + ", event=" + instance.lastEvent);
+                + ", queued=" + instance.queue.size() + ", event=" + instance.lastEvent
+                + ", screenshotCapability=" + canTakeScreenshot());
+    }
+
+    public static boolean canTakeScreenshot() {
+        if (instance == null) return false;
+        AccessibilityServiceInfo info = instance.getServiceInfo();
+        return info != null && (info.getCapabilities()
+                & AccessibilityServiceInfo.CAPABILITY_CAN_TAKE_SCREENSHOT) != 0;
     }
 
     public static boolean startPointer(int displayId, int width, int height, float x, float y) {
-        if (instance == null || Build.VERSION.SDK_INT < 30 || displayId <= 0) return false;
-        return instance.attachCursor(displayId, width, height, x, y);
-    }
-
-    public static void stopPointer() { if (instance != null) instance.stopSession(); }
-
-    public static boolean movePointer(int displayId, float x, float y) {
-        if (instance == null || instance.targetDisplay != displayId || instance.cursor == null) {
+        TextRelayAccessibilityService service = instance;
+        if (service == null || Build.VERSION.SDK_INT < 30 || displayId <= 0) return false;
+        try { return service.attachCursor(displayId, width, height, x, y); }
+        catch (RuntimeException error) {
+            report("start pointer failed: " + error);
             return false;
         }
-        return instance.positionCursor(x, y);
+    }
+
+    public static void stopPointer() {
+        TextRelayAccessibilityService service = instance;
+        if (service == null) return;
+        try { service.stopSession(); }
+        catch (RuntimeException error) { report("stop pointer failed: " + error); }
+    }
+
+    public static boolean movePointer(int displayId, float x, float y) {
+        TextRelayAccessibilityService service = instance;
+        if (service == null || service.targetDisplay != displayId || service.cursor == null) {
+            return false;
+        }
+        try { return service.positionCursor(x, y); }
+        catch (RuntimeException error) {
+            report("move pointer failed: " + error);
+            return false;
+        }
     }
 
     private boolean attachCursor(int displayId, int w, int h, float x, float y) {
@@ -232,23 +320,25 @@ public class TextRelayAccessibilityService extends AccessibilityService {
     private void continueDrag() {
         if (Build.VERSION.SDK_INT < 30) return;
         if (!dragging || busy) return;
-        boolean ending = releaseDrag;
-        int displayId = dragDisplay;
-        Display display = getSystemService(DisplayManager.class).getDisplay(displayId);
-        // A removed overlay must not prevent releasing a held stroke on a connected display.
-        if (display == null || !display.isValid()) {
-            dragging = false;
-            dragStroke = null;
-            dragDisplay = -1;
-            report("drag ended after display disconnect");
-            return;
+        try {
+            boolean ending = releaseDrag;
+            int displayId = dragDisplay;
+            Display display = getSystemService(DisplayManager.class).getDisplay(displayId);
+            // A removed overlay must not prevent releasing a held stroke on a connected display.
+            if (display == null || !display.isValid()) {
+                failed("drag ended after display disconnect");
+                return;
+            }
+            if (dragStroke == null) { failed("drag stroke lost"); return; }
+            dragStroke = dragStroke.continueStroke(path(strokeX, strokeY, pointerX, pointerY),
+                    0, ending ? 1 : 80, !ending);
+            strokeX = pointerX;
+            strokeY = pointerY;
+            submit(new GestureDescription.Builder().setDisplayId(displayId)
+                    .addStroke(dragStroke).build(), true, ending);
+        } catch (RuntimeException error) {
+            failed("drag continuation failed: " + error);
         }
-        dragStroke = dragStroke.continueStroke(path(strokeX, strokeY, pointerX, pointerY),
-                0, ending ? 1 : 80, !ending);
-        strokeX = pointerX;
-        strokeY = pointerY;
-        submit(new GestureDescription.Builder().setDisplayId(displayId)
-                .addStroke(dragStroke).build(), true, ending);
     }
 
     private void pump() {
@@ -295,14 +385,20 @@ public class TextRelayAccessibilityService extends AccessibilityService {
     }
 
     private static boolean ready(int displayId) {
-        if (instance == null || Build.VERSION.SDK_INT < 30 || displayId <= 0
-                || instance.targetDisplay != displayId || instance.cursor == null) {
+        TextRelayAccessibilityService service = instance;
+        if (service == null || Build.VERSION.SDK_INT < 30 || displayId <= 0
+                || service.targetDisplay != displayId || service.cursor == null) {
             report("no active accessibility touchpad for display=" + displayId);
             return false;
         }
-        Display d = instance.getSystemService(DisplayManager.class).getDisplay(displayId);
-        if (d == null || !d.isValid()) { instance.stopSession(); return false; }
-        return true;
+        try {
+            Display d = service.getSystemService(DisplayManager.class).getDisplay(displayId);
+            if (d == null || !d.isValid()) { service.stopSession(); return false; }
+            return true;
+        } catch (RuntimeException error) {
+            report("display check failed: " + error);
+            return false;
+        }
     }
 
     private static void report(String message) {
@@ -360,6 +456,39 @@ public class TextRelayAccessibilityService extends AccessibilityService {
         return observed;
     }
 
+    /**
+     * Safe accessibility fallback for external Back. AccessibilityService's
+     * GLOBAL_ACTION_BACK has no display argument, so only call it when a focused
+     * application window is actually present on the requested external display.
+     */
+    public static boolean performExternalBack(int displayId) {
+        if (instance == null || Build.VERSION.SDK_INT < 30 || displayId <= 0) {
+            report("external back unavailable: accessibility service not connected");
+            return false;
+        }
+        try {
+            boolean focusedExternalWindow = false;
+            for (AccessibilityWindowInfo window : windows(displayId)) {
+                if (window.getType() == AccessibilityWindowInfo.TYPE_APPLICATION
+                        && (window.isFocused() || window.isAccessibilityFocused())) {
+                    focusedExternalWindow = true;
+                    break;
+                }
+            }
+            if (!focusedExternalWindow) {
+                report("external back skipped: no focused external application window");
+                return false;
+            }
+            boolean result = instance.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK);
+            report(result ? "external back sent by accessibility"
+                    : "external back rejected by accessibility");
+            return result;
+        } catch (RuntimeException error) {
+            report("external back accessibility failed: " + error);
+            return false;
+        }
+    }
+
     public static boolean setFocusedText(int displayId, String text) {
         try {
             for (AccessibilityWindowInfo window : windows(displayId)) {
@@ -381,6 +510,66 @@ public class TextRelayAccessibilityService extends AccessibilityService {
         } catch (RuntimeException error) { report("text failed: " + error); return false; }
         report("no editable external focus; text retained on phone");
         return false;
+    }
+
+    public static void captureDisplay(int displayId, Context context,
+                                      ExternalScreenshotter.Callback callback) {
+        if (instance == null || Build.VERSION.SDK_INT < 30 || displayId <= 0) {
+            callback.onResult(new com.xrglasses.launcher.ScreenshotResult.Failed(
+                    context.getString(R.string.capture_unavailable)));
+            return;
+        }
+        if (!canTakeScreenshot()) {
+            callback.onResult(new com.xrglasses.launcher.ScreenshotResult.Failed(
+                    context.getString(R.string.capture_capability)));
+            return;
+        }
+        Log.i("XRScreenshot", "request display=" + displayId);
+        try {
+            Executor executor = instance.getMainExecutor();
+            instance.takeScreenshot(displayId, executor, new AccessibilityService.TakeScreenshotCallback() {
+                @Override public void onSuccess(AccessibilityService.ScreenshotResult result) {
+                    HardwareBuffer buffer = result.getHardwareBuffer();
+                    ColorSpace colorSpace = result.getColorSpace();
+                    Log.i("XRScreenshot", "capture success display=" + displayId
+                            + ", buffer=" + (buffer == null ? "null" : buffer.getWidth() + "x" + buffer.getHeight()));
+                    callback.onResult(ScreenshotStore.save(context, buffer, colorSpace));
+                }
+
+                @Override public void onFailure(int errorCode) {
+                    String reason = screenshotError(context, errorCode);
+                    Log.e("XRScreenshot", "capture failed display=" + displayId
+                            + ", code=" + errorCode + ", reason=" + reason);
+                    callback.onResult(new com.xrglasses.launcher.ScreenshotResult.Failed(reason));
+                }
+            });
+        } catch (RuntimeException error) {
+            Log.e("XRScreenshot", "request failed display=" + displayId, error);
+            callback.onResult(new com.xrglasses.launcher.ScreenshotResult.Failed(
+                    context.getString(R.string.capture_request_failed, error.getClass().getSimpleName() + ": " + error.getMessage())));
+        }
+    }
+
+    private static String screenshotError(Context context, int errorCode) {
+        if (errorCode == AccessibilityService.ERROR_TAKE_SCREENSHOT_INTERNAL_ERROR) {
+            return context.getString(R.string.capture_internal, errorCode);
+        }
+        if (errorCode == AccessibilityService.ERROR_TAKE_SCREENSHOT_INTERVAL_TIME_SHORT) {
+            return context.getString(R.string.capture_too_soon, errorCode);
+        }
+        if (errorCode == AccessibilityService.ERROR_TAKE_SCREENSHOT_INVALID_DISPLAY) {
+            return context.getString(R.string.capture_invalid_display, errorCode);
+        }
+        if (errorCode == AccessibilityService.ERROR_TAKE_SCREENSHOT_INVALID_WINDOW) {
+            return context.getString(R.string.capture_invalid_window, errorCode);
+        }
+        if (errorCode == AccessibilityService.ERROR_TAKE_SCREENSHOT_NO_ACCESSIBILITY_ACCESS) {
+            return context.getString(R.string.capture_denied, errorCode);
+        }
+        if (errorCode == AccessibilityService.ERROR_TAKE_SCREENSHOT_SECURE_WINDOW) {
+            return context.getString(R.string.capture_secure, errorCode);
+        }
+        return context.getString(R.string.capture_unknown, errorCode);
     }
 
     private static final class CursorView extends View {

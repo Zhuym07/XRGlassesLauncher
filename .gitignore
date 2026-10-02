@@ -8,3 +8,12 @@ build/
 captures/
 .externalNativeBuild/
 .cxx/
+
+# Local release signing material: never commit or attach to a release.
+.kotlin/
+signing/
+keystore.properties
+*.jks
+*.keystore
+*.p12
+*.pfx
