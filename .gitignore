@@ -1,5 +1,6 @@
 .gradle/
 .idea/
+.vscode/
 local.properties
 build/
 */build/
@@ -17,3 +18,15 @@ keystore.properties
 *.keystore
 *.p12
 *.pfx
+
+# Private history backups and local release artifacts.
+.release-backup/
+*.apk
+*.aab
+*.apks
+*.log
+*.hprof
+.DS_Store
+Thumbs.db
+__pycache__/
+*.pyc

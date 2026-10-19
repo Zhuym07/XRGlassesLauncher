@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="440" viewBox="0 0 1280 440" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">XR Desktop</title>
+  <desc id="desc">把应用放到眼前，把操控留在手边。右侧为外屏桌面与手机触控板的功能示意。</desc>
+  <defs>
+    <linearGradient id="bg" x2="1" y2="1">
+      <stop stop-color="#101C2C"/><stop offset="1" stop-color="#163D46"/>
+    </linearGradient>
+    <linearGradient id="screen" x2="1" y2="1">
+      <stop stop-color="#254B56"/><stop offset="1" stop-color="#132C3A"/>
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="440" rx="28" fill="url(#bg)"/>
+  <circle cx="1190" cy="40" r="300" stroke="#75C8BC" stroke-opacity=".08" stroke-width="80"/>
+  <circle cx="1190" cy="40" r="390" stroke="#75C8BC" stroke-opacity=".05"/>
+  <g font-family="Segoe UI, Microsoft YaHei, PingFang SC, sans-serif">
+    <rect x="64" y="54" width="7" height="16" rx="3.5" fill="#43E8C4"/>
+    <text x="84" y="67" fill="#9CBDBF" font-size="14" font-weight="600" letter-spacing="3">YOUR APPS. A BIGGER VIEW.</text>
+    <text x="60" y="161" fill="#E2FFF8" font-size="72" font-weight="700" letter-spacing="-2">XR Desktop</text>
+    <text x="64" y="222" fill="#E2FFF8" font-size="29" font-weight="600">把应用放到眼前，把操控留在手边。</text>
+    <text x="64" y="263" fill="#A3BFC3" font-size="18">XR 眼镜桌面 × 手机低亮度触控板</text>
+    <g fill="#43E8C4" fill-opacity=".12" stroke="#43E8C4" stroke-opacity=".25">
+      <rect x="64" y="315" width="116" height="38" rx="19"/>
+      <rect x="192" y="315" width="116" height="38" rx="19"/>
+      <rect x="320" y="315" width="140" height="38" rx="19"/>
+    </g>
+    <g fill="#88F4DA" font-size="15" text-anchor="middle">
+      <text x="122" y="340">外屏桌面</text><text x="250" y="340">触控操控</text><text x="390" y="340">文字与截图</text>
+    </g>
+    <rect x="788" y="88" width="412" height="250" rx="20" fill="#07141F" fill-opacity=".5" stroke="#87B3B9" stroke-opacity=".35"/>
+    <rect x="801" y="101" width="386" height="224" rx="12" fill="url(#screen)"/>
+    <text x="825" y="134" fill="#C8E5E5" font-size="13" font-weight="600" letter-spacing="2">XR DESKTOP</text>
+    <rect x="825" y="151" width="337" height="26" rx="7" fill="#DFF9F1" fill-opacity=".07"/>
+    <circle cx="839" cy="164" r="4" stroke="#91B7B9" stroke-width="1.5"/>
+    <path d="m842 167 3 3" stroke="#91B7B9" stroke-width="1.5" stroke-linecap="round"/>
+    <g fill="#C7F3E9" fill-opacity=".22">
+      <rect x="831" y="196" width="46" height="46" rx="12"/><rect x="901" y="196" width="46" height="46" rx="12"/>
+      <rect x="971" y="196" width="46" height="46" rx="12"/><rect x="1041" y="196" width="46" height="46" rx="12"/>
+      <rect x="1111" y="196" width="46" height="46" rx="12"/>
+    </g>
+    <g stroke="#A9DCD1" stroke-opacity=".7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M844 211h20v15h-20z m6 4 6 4-6 4z"/>
+      <circle cx="924" cy="219" r="10"/>
+      <path d="M914 219h20m-10-10c-6 5-6 15 0 20 6-5 6-15 0-20ZM984 211h20v16h-20z m4 12 5-5 4 4 3-2M1055 211h18v16h-18z m4 5h10m-10 5h7M1123 214h22v13h-22z m5-4h14v4"/>
+    </g>
+    <path d="m1020 263 7 23 5-8 9-3-21-12Z" fill="#43E8C4"/>
+    <rect x="897" y="304" width="198" height="8" rx="4" fill="#C7F3E9" fill-opacity=".1"/>
+    <rect x="720" y="214" width="109" height="170" rx="20" fill="#07111B" stroke="#88B1B7" stroke-width="2"/>
+    <rect x="729" y="223" width="91" height="152" rx="13" fill="#03080D"/>
+    <rect x="758" y="229" width="32" height="4" rx="2" fill="#324552"/>
+    <circle cx="774" cy="293" r="22" stroke="#43E8C4" stroke-opacity=".3" stroke-dasharray="3 5"/>
+    <circle cx="774" cy="293" r="5" fill="#43E8C4" fill-opacity=".75"/>
+    <path d="M740 351h68m-46 0v14" stroke="#36585D"/>
+    <path d="M838 300c38 0 32-35 66-35h26" stroke="#43E8C4" stroke-opacity=".5" stroke-width="2" stroke-dasharray="4 6"/>
+    <text x="1198" y="386" text-anchor="end" fill="#83A7AC" font-size="12" letter-spacing="1">功能示意 · 非实机截图</text>
+  </g>
+</svg>
