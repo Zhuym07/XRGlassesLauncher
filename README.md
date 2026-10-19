@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <strong>v0.4.7</strong> · Android 10+ · 简体中文 / English<br>
+  <strong>v0.4.7</strong> · Android 10+ · 简体中文 / English · <a href="LICENSE">GPL-3.0</a><br>
   重点适配一加 13 / ColorOS 与支持 DP 视频输出的 XR 眼镜连接方案
 </p>
 
@@ -114,4 +114,4 @@ Release 签名、附件与验证流程见 [发布指南](docs/RELEASING.md)。�
 
 ## 版权
 
-© 2026 Ckar。源码公开不等于授予开源许可；本仓库目前未提供源码许可授权。第三方组件的版权与许可见应用「关于与版权」，其许可仅适用于对应组件。
+© 2026 Ckar。除文件另有声明外，本项目采用 **GNU General Public License v3.0（GPL-3.0-only）**，完整条款见 [LICENSE](LICENSE)。第三方组件保留各自的版权与许可，详见应用「关于与版权」及对应文件声明。
